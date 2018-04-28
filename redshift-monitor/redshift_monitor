@@ -48,4 +48,4 @@ class RedshiftDaemon:
             time.sleep(self.check_every_s)
 
 if __name__ == '__main__':
-    RedshiftDaemon(5).run()
+    RedshiftDaemon(60 * 30).run()
