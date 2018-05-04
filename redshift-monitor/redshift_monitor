@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -u
 
 ### 
 # If you use 'geoclue' in redshift and run vpn, it's getting pretty confused (as it should!).
