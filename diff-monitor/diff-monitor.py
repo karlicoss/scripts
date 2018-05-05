@@ -3,6 +3,7 @@ import argparse
 import difflib
 import logging
 import os.path
+import subprocess
 import sys
 
 from kython import atomic_write, get_logzero
@@ -28,6 +29,8 @@ def save_state(path: str, value: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", help="Previous state file", required=True)
+    parser.add_argument("-i", action='store_true', default=False, help="Listen for stdin")
+    parser.add_argument('command', nargs='*')
     # TODO tag for logger?
     # TODO rotating state files?
 
@@ -35,7 +38,13 @@ def main():
 
 
     prev_state = load_state(args.state)
-    cur_state = sys.stdin.read()
+
+    cur_state: str
+    if args.i:
+        cur_state = sys.stdin.read()
+    else:
+        cur_state = subprocess.check_output(args.command).decode('utf-8')
+
     if prev_state is None:
         logger.warn("No previous state")
         save_state(args.state, cur_state)
