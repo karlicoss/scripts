@@ -32,6 +32,13 @@ class RedshiftDaemon:
         cmd = f'redshift-gtk -l {location.latitude}:{location.longitude}'.split()
         print("Running " + str(cmd))
         self.redshift = Popen(cmd, preexec_fn=os.setsid)
+        time.sleep(3) # give it a bit of time to start, this is for proper failure detection
+
+    def failed(self) -> bool:
+        if self.redshift is None:
+            return False
+        ret = self.redshift.poll()
+        return ret != 0
 
     def run(self):
         while True:
@@ -43,7 +50,10 @@ class RedshiftDaemon:
                 geo = self.geolocator.geocode(new_city)
                 print(f"Current location: {geo}")
                 self.restart_redshift(geo)
-        
+
+            if self.failed():
+                raise RuntimeError("Redshift has terminated!")
+
             print(f"Sleeping for {self.check_every_s} seconds")
             time.sleep(self.check_every_s)
 
