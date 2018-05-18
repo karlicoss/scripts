@@ -1,0 +1,5 @@
+#!/bin/bash
+# TODO also need this to prevent ipython from changing the title https://stackoverflow.com/a/40046958
+
+# gnome-terminal -- can't set class or title for some reason, so we use terminator use terminator ...
+terminator -T "permipi" -x ipython3
