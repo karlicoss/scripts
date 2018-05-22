@@ -1,20 +1,21 @@
 #!/usr/bin/python3 -u
 
-### 
-# If you use 'geoclue' in redshift and run vpn, it's getting pretty confused (as it should!).
+###
+# If you use 'geoclue' in redshift and run vpn, it's getting pretty confused (as it should be!).
 # But timezone information is available on ubuntu anyway, so this script uses it and reruns redshift in case something changed.
-# requirements: geopy, tzlocal
+# pip3 install geopy tzlocal
 ###
 
+import atexit
 import signal
 import time
 import os
 from subprocess import check_output, Popen
 
-from geopy.geocoders import Nominatim
+from geopy.geocoders import Nominatim # type: ignore
 
 def get_tz_city():
-    from tzlocal import get_localzone
+    from tzlocal import get_localzone # type: ignore
     city = get_localzone().zone.split('/')[-1]
     return city
 
@@ -25,22 +26,26 @@ class RedshiftDaemon:
         self.geolocator = Nominatim()
         self.check_every_s = check_every_s
 
-    def restart_redshift(self, location):
+    def stop_refshift(self):
         if self.redshift is not None:
-            os.killpg(os.getpgid(redshift.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(self.redshift.pid), signal.SIGTERM)
             self.redshift = None
+
+    def restart_redshift(self, location):
+        self.stop_refshift()
         cmd = f'redshift-gtk -l {location.latitude}:{location.longitude}'.split()
         print("Running " + str(cmd))
         self.redshift = Popen(cmd, preexec_fn=os.setsid)
-        time.sleep(3) # give it a bit of time to start, this is for proper failure detection
+        time.sleep(5) # give it a bit of time to start, this is for proper failure detection
 
     def failed(self) -> bool:
         if self.redshift is None:
             return False
         ret = self.redshift.poll()
-        return ret != 0
+        return ret is not None and ret != 0
 
     def run(self):
+        atexit.register(lambda: self.stop_refshift())
         while True:
             new_city = get_tz_city()
             print(f"Detected city: {new_city}")
