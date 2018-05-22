@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+from enum import Enum
+import os
+import re
+from subprocess import check_output, check_call, run, PIPE, Popen
+import sys
+from collections import namedtuple
+import time
+from typing import Tuple, Dict, NamedTuple
+
+# wmctrl -d
+# wmctrl -lG
+#
+# WA: 65, 24 -- usable area (apparently, unity panel and top panel)
+# coordinates are w.r.t the current viewport
+# wmctrl -r doesn't seem to like crossing desktop boundaries, so we have to resize window
+
+Resolution = namedtuple('Resolution', ['x', 'y'])
+Monitor = namedtuple('Monitor', ['id', 'x', 'y', 'res'])
+
+
+# assumes monitors set up kinda like this
+#      ____
+#  ____|  |
+# |    |  |
+# |    |  |
+# """""""""
+# X ->  Y ^
+
+# TODO query that automatically?
+LeftRes = Resolution(x=1600, y=900)
+RightRes = Resolution(x=2560, y=1440)
+
+
+Left = Monitor(id='left', x=0, y=RightRes.y - LeftRes.y, res=LeftRes)
+Right = Monitor(id='right', x=LeftRes.x, y=0, res=RightRes)
+HDESKTOPS = 5
+WDESKTOPS = 2
+
+
+def monitor_middle(m: Monitor):
+    return (m.x + m.res.x // 2, m.y + m.res.y // 2)
+
+
+WORKSPACE_WIDTH = Left.res.x + Right.res.x
+WORKSPACE_HEIGHT = max(Left.res.y, Right.res.y)
+# wmctrl -d
+# 0  * DG: 20000x5120  VP: 12000,0  WA: 65,24 3935x2536  N/A
+
+# ok, kinda makes sense: everything is single viewport sized (2560 + 1440) * 5 x 2560 * 2 (5 x 2 virtual desktops)
+
+
+# wmctrl -r issues commands w.r.t. the current viewport coordinates
+
+
+# TODO ok, so X coordinate starts on the left, Y on the top
+
+Window = namedtuple('Window', ['wid', 'x', 'y', 'w', 'h', 'depth', 'name'])
+
+def get_window_info(wid: str) -> Window:
+    X = None
+    Y = None
+    W = None
+    H = None
+    D = None
+    for l in check_output('xwininfo -id {}'.format(wid), shell=True).decode('utf-8').split('\n'):
+        if 'Absolute upper-left X:' in l:
+            X = int(l.split(':')[-1])
+            continue
+        if 'Absolute upper-left Y:' in l:
+            Y = int(l.split(':')[-1])
+            continue
+        if 'Width:' in l:
+            W = int(l.split(':')[-1])
+            continue
+        if 'Height:' in l:
+            H = int(l.split(':')[-1])
+            continue
+        if 'Depth:' in l:
+            D = int(l.split(':')[-1])
+            continue
+    return Window(
+        wid=wid,
+        x=X,
+        y=Y,
+        w=W,
+        h=H,
+        depth=D,
+        name="TODO",
+    )
+
+
+def get_active() -> Window:
+    wid = check_output(["xdotool", "getactivewindow"]).decode('utf-8').strip()
+    return get_window_info(wid)
+
+def get_by_title(title: str) -> Window:
+    res = run(["xdotool", "search", "--name", title], stdout=PIPE)
+    if res.returncode != 0:
+        return None
+    wid = res.stdout.decode('utf-8').strip()
+    return get_window_info(wid)
+
+
+Workspace = int
+
+Desktop = Tuple[Workspace, Monitor]
+
+def flip(d: Desktop) -> Desktop:
+    return (d[0], Right if d[1] == Left else Left)
+
+def coord_to_workspace(x, y):
+    return x // WORKSPACE_WIDTH + HDESKTOPS * (y // WORKSPACE_HEIGHT)
+
+
+def get_desktop(w: Window) -> Desktop:
+    workspace = coord_to_workspace(w.x, w.y)
+    xpos = w.x % WORKSPACE_WIDTH
+    ypos = w.y % WORKSPACE_HEIGHT
+    monitor = None
+    if 0 <= xpos < Left.res.x:
+        monitor = Left
+    else:
+        monitor = Right
+    return (workspace, monitor)
+
+  # TODO ugh, unclear how to query where is current focus... 
+def get_left_active_desktop() -> Desktop:
+    vinfo = check_output(['wmctrl', '-d']).decode('utf-8')
+    res = re.search("VP: (\d+),(\d+)", vinfo)
+    x = int(res.group(1))
+    y = int(res.group(2))
+    return (coord_to_workspace(x, y), LEFT)
+
+
+_unity_filters = [
+    'unity',
+    'Hud',
+    'Xdnd',
+    'Desktop',
+]
+
+_mate_filters = [
+    'Top Panel',
+    'x-caja-desktop',
+]
+
+_filters = _unity_filters + _mate_filters
+
+def iter_windows():
+    # exclude unity crap
+    swind = check_output(['wmctrl', '-lG']).decode('utf-8').split('\n')
+    WINCOL = 0
+    XCOL = 2
+    YCOL = 3
+    WCOL = 4
+    HCOL = 5
+    NAMECOL = 6
+    for s in swind:
+        if s == '':
+            continue
+        name = ''.join(s[NAMECOL:])
+        filtered = any(f in name for f in _filters)
+        if filtered:
+            continue
+        s = s.split()
+        yield Window(
+            wid=s[WINCOL],
+            x=int(s[XCOL]),
+            y=int(s[YCOL]),
+            w=int(s[WCOL]),
+            h=int(s[HCOL]),
+            depth=-1,
+            name=name,
+       )
+
+def get_windows():
+    return list(iter_windows())
+
+def moveto(wid: str, m: Monitor, resize=True):
+    if resize:
+        w = m.res.x // 2
+        h = m.res.y // 2
+    else:
+        w = -1
+        h = -1
+    (x, y) = monitor_middle(m)
+    check_call([
+        "wmctrl",
+        "-i", # interpret window argument as numeric value
+        "-r",
+        wid,
+        "-e",
+        # 5 for centered gravity (see https://standards.freedesktop.org/wm-spec/wm-spec-1.3.html)
+        # geometry is modified so the window can always be moved
+        "5,{x},{y},{w},{h}".format(x=x, y=y, w=w, h=h)
+    ])
+
+def activate(wid: str):
+    check_call([
+        "xdotool",
+        "windowactivate",
+        wid
+    ])
+
+def switch_to(wid: str):
+    check_call([
+        "wmctrl",
+        "-i", # to treat -a argument as window id
+        "-a", wid
+    ])
+
+def notify(text: str):
+    check_call("notify-send --urgency=critical \"{}\"".format(text), shell=True)
+
+
+def move_active_to_other():
+    a = get_active()
+    if 0 <= a.x < Left.res.x:
+        # left monitor
+        moveto(a.wid, Right)
+    elif Right.x <= a.x <= Right.x + Right.res.x:
+        # right monitor
+        moveto(a.wid, Left)
+    else:
+        notify("Cound't determine current desktop!")
+        sys.exit(1)
+
+def get_window_order() -> Dict[int, int]:
+    stack = [w.strip() for w in check_output('xprop -root | grep "_NET_CLIENT_LIST_STACKING(WINDOW)"', shell=True).decode('utf-8').split("# ")[-1].split(', ')]
+    # err.. this thing has no leading zeros apparently?
+    order = {int(w, base=16): i for i, w in enumerate(stack)}
+    return order
+
+
+
+def switch_active_to_other():
+    w = get_active()
+    this_d = get_desktop(w)
+    print(f"current desktop: {this_d}")
+    other_d = flip(this_d)
+    other_windows = [w for w in get_windows() if get_desktop(w) == other_d]
+    for w in other_windows:
+        print(w)
+    order = get_window_order()
+    top = max(other_windows, key=lambda w: order[int(w.wid, base=16)], default=None)
+    print(f"top is {top}")
+
+    if top is not None:
+        switch_to(top.wid)
+    else:
+        notify("No window to switch to!")
+        sys.exit(1)
+
+def show_here(title: str, command: str):
+    pwin = get_by_title(title)
+    if pwin is None:
+        Popen(command, shell=True)
+        time.sleep(1) # just in case
+        pwin = get_by_title(title)
+        assert pwin is not None
+
+    aw = get_active()
+    desktop = None
+    if aw is None:
+        desktop = get_left_active_desktop()
+    else:
+        desktop = get_desktop(aw)
+
+    mv = Left if desktop[1] == Left else Right
+    moveto(pwin.wid, mv, resize=False)
+    activate(pwin.wid)
+
+def daemon():
+    import signal
+    def handle_switch(signum, stack):
+        switch_active_to_other()
+
+    def handle_move(signum, stack):
+        move_active_to_other()
+
+    # Register signal handlers
+    signal.signal(signal.SIGUSR1, handle_switch)
+    signal.signal(signal.SIGUSR2, handle_move)
+
+    while True:
+        time.sleep(10)
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Other desktop manipulation')
+    subp = parser.add_subparsers(title='mode', dest='mode')
+    dparser = subp.add_parser("daemon")
+    cparser = subp.add_parser("client")
+    cparser.add_argument('action', type=str, choices=['switch', 'move', 'show'])
+    cparser.add_argument('--title', type=str, required=False)
+    cparser.add_argument('--command', type=str, required=False)
+    args = parser.parse_args()
+
+    if args.mode == 'client':
+        # TODO send signal
+        if args.action == "switch":
+            switch_active_to_other()
+        elif args.action == "move":
+            move_active_to_other()
+        elif args.action == 'show':
+            show_here(args.title, args.command)
+        else:
+            raise RuntimeError
+    elif args.mode == "daemon":
+        daemon()
+    else:
+        raise RuntimeError
+
+if __name__ == '__main__':
+    main()
