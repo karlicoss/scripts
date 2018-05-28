@@ -18,6 +18,7 @@ from typing import Tuple, Dict, NamedTuple
 Resolution = namedtuple('Resolution', ['x', 'y'])
 Monitor = namedtuple('Monitor', ['id', 'x', 'y', 'res'])
 
+debug = False
 
 # assumes monitors set up kinda like this
 #      ____
@@ -55,7 +56,7 @@ WORKSPACE_HEIGHT = max(Left.res.y, Right.res.y)
 
 # TODO ok, so X coordinate starts on the left, Y on the top
 
-Window = namedtuple('Window', ['wid', 'x', 'y', 'w', 'h', 'depth', 'name'])
+Window = namedtuple('Window', ['wid', 'pid', 'x', 'y', 'w', 'h', 'depth', 'name'])
 
 def get_window_info(wid: str) -> Window:
     X = None
@@ -79,6 +80,18 @@ def get_window_info(wid: str) -> Window:
         if 'Depth:' in l:
             D = int(l.split(':')[-1])
             continue
+
+    pid: int
+    name: str
+    if debug:
+        # TODO wm command?
+        out = check_output(f'xprop -id {wid} _NET_WM_PID WM_NAME', shell=True).decode('utf-8').splitlines()
+        pid = int(re.search("_NET_WM_PID.*= (\d+)", out[0]).group(1))
+        name = re.search("WM_NAME.*= (.*)", out[1]).group(1)
+    else:
+        pid = None
+        name = None
+
     return Window(
         wid=wid,
         x=X,
@@ -86,7 +99,8 @@ def get_window_info(wid: str) -> Window:
         w=W,
         h=H,
         depth=D,
-        name="TODO",
+        name=name,
+        pid=pid,
     )
 
 
@@ -95,7 +109,9 @@ def get_active() -> Window:
     return get_window_info(wid)
 
 def get_by_title(title: str) -> Window:
-    res = run(["xdotool", "search", "--name", title], stdout=PIPE)
+    cmd = ["xdotool", "search", "--name", f"^{title}$"]
+    res = run(cmd, stdout=PIPE)
+    print(res)
     if res.returncode != 0:
         return None
     wid = res.stdout.decode('utf-8').strip()
@@ -149,13 +165,14 @@ _filters = _unity_filters + _mate_filters
 
 def iter_windows():
     # exclude unity crap
-    swind = check_output(['wmctrl', '-lG']).decode('utf-8').split('\n')
+    swind = check_output(['wmctrl', '-lpG']).decode('utf-8').split('\n')
     WINCOL = 0
-    XCOL = 2
-    YCOL = 3
-    WCOL = 4
-    HCOL = 5
-    NAMECOL = 6
+    PIDCOL = 2
+    XCOL = 3
+    YCOL = 4
+    WCOL = 5
+    HCOL = 6
+    NAMECOL = 7
     for s in swind:
         if s == '':
             continue
@@ -166,6 +183,7 @@ def iter_windows():
         s = s.split()
         yield Window(
             wid=s[WINCOL],
+            pid=int(s[PIDCOL]),
             x=int(s[XCOL]),
             y=int(s[YCOL]),
             w=int(s[WCOL]),
@@ -254,9 +272,10 @@ def switch_active_to_other():
 
 def show_here(title: str, command: str):
     pwin = get_by_title(title)
+    print(f"Current window: {pwin}")
     if pwin is None:
         Popen(command, shell=True)
-        time.sleep(1) # just in case
+        time.sleep(1) # TODO ugh, how to get rid of it?
         pwin = get_by_title(title)
         assert pwin is not None
 
