@@ -81,11 +81,11 @@ def get_window_info(wid: str) -> Window:
             D = int(l.split(':')[-1])
             continue
 
-    pid: int
-    name: str
+    pid = None
+    name = None
     if debug:
         # TODO wm command?
-        out = check_output(f'xprop -id {wid} _NET_WM_PID WM_NAME', shell=True).decode('utf-8').splitlines()
+        out = check_output('xprop -id {wid} _NET_WM_PID WM_NAME'.format(wid=wid), shell=True).decode('utf-8').splitlines()
         pid = int(re.search("_NET_WM_PID.*= (\d+)", out[0]).group(1))
         name = re.search("WM_NAME.*= (.*)", out[1]).group(1)
     else:
@@ -109,7 +109,7 @@ def get_active() -> Window:
     return get_window_info(wid)
 
 def get_by_title(title: str) -> Window:
-    cmd = ["xdotool", "search", "--name", f"^{title}$"]
+    cmd = ["xdotool", "search", "--name", "^{title}$".format(title=title)]
     res = run(cmd, stdout=PIPE)
     print(res)
     if res.returncode != 0:
@@ -255,14 +255,14 @@ def get_window_order() -> Dict[int, int]:
 def switch_active_to_other():
     w = get_active()
     this_d = get_desktop(w)
-    print(f"current desktop: {this_d}")
+    print("current desktop: {this_d}".format(this_d=this_d))
     other_d = flip(this_d)
     other_windows = [w for w in get_windows() if get_desktop(w) == other_d]
     for w in other_windows:
         print(w)
     order = get_window_order()
     top = max(other_windows, key=lambda w: order[int(w.wid, base=16)], default=None)
-    print(f"top is {top}")
+    print("top is {top}".format(top=top))
 
     if top is not None:
         switch_to(top.wid)
@@ -272,7 +272,7 @@ def switch_active_to_other():
 
 def show_here(title: str, command: str):
     pwin = get_by_title(title)
-    print(f"Current window: {pwin}")
+    print("Current window: {pwin}".format(pwin=pwin))
     if pwin is None:
         Popen(command, shell=True)
         time.sleep(1) # TODO ugh, how to get rid of it?
