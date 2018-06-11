@@ -43,9 +43,9 @@ def main():
     else:
         cur_state = subprocess.check_output(args.command).decode('utf-8')
 
+    exitcode = 0
     if prev_state is None:
         logger.warn("No previous state")
-        save_state(args.state, cur_state)
     elif prev_state == cur_state:
         logger.info("States match")
     else:
@@ -54,9 +54,9 @@ def main():
         logger.error("Diff:")
         for d in diff:
             logger.error(d)
-        save_state(args.state, cur_state)
-        sys.exit(1)
-
+        exitcode = 1
+    save_state(args.state, cur_state)
+    sys.exit(exitcode)
 
 if __name__ == "__main__":
     main()
