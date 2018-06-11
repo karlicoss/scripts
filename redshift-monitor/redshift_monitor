@@ -11,6 +11,7 @@ import signal
 import time
 import os
 from subprocess import check_output, Popen
+import sys
 
 from geopy.geocoders import Nominatim # type: ignore
 
@@ -31,6 +32,13 @@ class RedshiftDaemon:
             os.killpg(os.getpgid(self.redshift.pid), signal.SIGTERM)
             self.redshift = None
 
+    def try_stop_refshift(self):
+        try:
+            self.stop_refshift()
+        except Exception as e:
+            sys.stderr.write(str(e))
+
+
     def restart_redshift(self, location):
         self.stop_refshift()
         cmd = f'redshift-gtk -l {location.latitude}:{location.longitude}'.split()
@@ -45,7 +53,7 @@ class RedshiftDaemon:
         return ret is not None and ret != 0
 
     def run(self):
-        atexit.register(lambda: self.stop_refshift())
+        atexit.register(lambda: self.try_stop_refshift())
         while True:
             new_city = get_tz_city()
             print(f"Detected city: {new_city}")
