@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+I tried killall -SIGSTOP dunst -- but that makes notify-send command stuck
+
+"""
+
+
 import os
 from pathlib import Path
 import signal
