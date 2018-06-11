@@ -38,7 +38,6 @@ Right = Monitor(id='right', x=LeftRes.x, y=0, res=RightRes)
 HDESKTOPS = 5
 WDESKTOPS = 2
 
-
 def monitor_middle(m: Monitor):
     return (m.x + m.res.x // 2, m.y + m.res.y // 2)
 
@@ -56,9 +55,10 @@ WORKSPACE_HEIGHT = max(Left.res.y, Right.res.y)
 
 # TODO ok, so X coordinate starts on the left, Y on the top
 
-Window = namedtuple('Window', ['wid', 'pid', 'x', 'y', 'w', 'h', 'depth', 'name'])
+Window = namedtuple('Window', ['wid', 'workspace', 'pid', 'x', 'y', 'w', 'h', 'depth', 'name'])
+Wid = int
 
-def get_window_info(wid: str) -> Window:
+def get_window_info(wid: Wid) -> Window:
     X = None
     Y = None
     W = None
@@ -94,6 +94,7 @@ def get_window_info(wid: str) -> Window:
 
     return Window(
         wid=wid,
+        workspace=None,
         x=X,
         y=Y,
         w=W,
@@ -128,17 +129,61 @@ def flip(d: Desktop) -> Desktop:
 def coord_to_workspace(x, y):
     return x // WORKSPACE_WIDTH + HDESKTOPS * (y // WORKSPACE_HEIGHT)
 
+class WM:
+    def get_desktop(self, w: Window) -> Desktop:
+        raise NotImplementedError
+
+    def get_this_desktop(self) -> Desktop:
+        raise NotImplementedError
+
+class Unity(WM):
+    def get_desktop(self, w: Window) -> Desktop:
+        workspace = coord_to_workspace(w.x, w.y)
+        xpos = w.x % WORKSPACE_WIDTH
+        ypos = w.y % WORKSPACE_HEIGHT
+        monitor = None
+        if 0 <= xpos < Left.res.x:
+            monitor = Left
+        else:
+            monitor = Right
+        return (workspace, monitor)
+
+
+    def get_this_desktop(self) -> Desktop:
+        w = get_active()
+        return get_desktop(w)
+
+# mate's got real virtual desktops
+class Mate(WM):
+    def _get_workspace(self, wid: Wid) -> Workspace:
+        return int(check_output(['xdotool', 'get_desktop_for_window', str(wid)]).decode('utf-8'))
+
+    def get_monitor(self, w: Window) -> Monitor:
+        xpos = w.x % WORKSPACE_WIDTH
+        ypos = w.y % WORKSPACE_HEIGHT
+        monitor = None
+        if 0 <= xpos < Left.res.x:
+            monitor = Left
+        else:
+            monitor = Right
+        return monitor
+
+    def get_desktop(self, w: Window) -> Desktop:
+        workspace = w.workspace if w.workspace is not None else self._get_workspace(w.wid)
+        return (workspace, self.get_monitor(w))
+
+    def get_this_desktop(self) -> Desktop:
+        # we can't trust active window since it's -1 for on top windows
+        workspace = int(check_output(['xdotool', 'get_desktop']).decode('utf-8'))
+        w = get_active()
+        monitor = self.get_monitor(w)
+        return (workspace, monitor)
+
+
+wm = Mate() # TODO
 
 def get_desktop(w: Window) -> Desktop:
-    workspace = coord_to_workspace(w.x, w.y)
-    xpos = w.x % WORKSPACE_WIDTH
-    ypos = w.y % WORKSPACE_HEIGHT
-    monitor = None
-    if 0 <= xpos < Left.res.x:
-        monitor = Left
-    else:
-        monitor = Right
-    return (workspace, monitor)
+    return wm.get_desktop(w)
 
   # TODO ugh, unclear how to query where is current focus... 
 def get_left_active_desktop() -> Desktop:
@@ -165,24 +210,26 @@ _filters = _unity_filters + _mate_filters
 
 def iter_windows():
     # exclude unity crap
-    swind = check_output(['wmctrl', '-lpG']).decode('utf-8').split('\n')
+    swind = check_output(['wmctrl', '-lpG']).decode('utf-8').splitlines()
     WINCOL = 0
+    WSCOL = 1
     PIDCOL = 2
     XCOL = 3
     YCOL = 4
     WCOL = 5
     HCOL = 6
-    NAMECOL = 7
+    NAMECOL = 8
     for s in swind:
         if s == '':
             continue
-        name = ''.join(s[NAMECOL:])
-        filtered = any(f in name for f in _filters)
+        s = s.split()
+        name = ' '.join(s[NAMECOL:])
+        filtered = any(name.endswith(f) for f in _filters)
         if filtered:
             continue
-        s = s.split()
         yield Window(
-            wid=s[WINCOL],
+            wid=int(s[WINCOL], base=16),
+            workspace=int(s[WSCOL]),
             pid=int(s[PIDCOL]),
             x=int(s[XCOL]),
             y=int(s[YCOL]),
@@ -191,6 +238,7 @@ def iter_windows():
             depth=-1,
             name=name,
        )
+# TODO cache wmctrl output
 
 def get_windows():
     return list(iter_windows())
@@ -221,16 +269,24 @@ def activate(wid: str):
         wid
     ])
 
-def switch_to(wid: str):
+def switch_to(wid: Wid):
     check_call([
         "wmctrl",
         "-i", # to treat -a argument as window id
-        "-a", wid
+        "-a", str(wid)
     ])
 
-def notify(text: str):
-    check_call("notify-send --urgency=critical \"{}\"".format(text), shell=True)
+def notify(text: str, error=True):
+    check_call("notify-send --urgency={urgency} \"{text}\"".format(urgency="critical" if error else "normal", text=text), shell=True)
 
+
+def dbg(s):
+    if not debug:
+        return
+    print(s)
+    notify("DEBUG: " + s, error=False)
+
+# ugh right, so Mate does have real desktops...
 
 def move_active_to_other():
     a = get_active()
@@ -253,15 +309,17 @@ def get_window_order() -> Dict[int, int]:
 
 
 def switch_active_to_other():
-    w = get_active()
-    this_d = get_desktop(w)
-    print("current desktop: {this_d}".format(this_d=this_d))
+    this_d = wm.get_this_desktop()
+    dbg("current desktop: {this_d}".format(this_d=this_d))
     other_d = flip(this_d)
-    other_windows = [w for w in get_windows() if get_desktop(w) == other_d]
-    for w in other_windows:
-        print(w)
+    # TODO optimize query via xdotool?
+    other_windows = []
+    for w in iter_windows():
+        d = wm.get_desktop(w)
+        if d[1] == other_d[1] and (d[0] == other_d[0] or d[0] == -1):
+            other_windows.append(w)
     order = get_window_order()
-    top = max(other_windows, key=lambda w: order[int(w.wid, base=16)], default=None)
+    top = max(other_windows, key=lambda w: order[w.wid], default=None)
     print("top is {top}".format(top=top))
 
     if top is not None:

@@ -24,8 +24,6 @@ def save_state(path: str, value: str):
         fo.write(value)
 
 
-# TODO difflib?
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", help="Previous state file", required=True)
