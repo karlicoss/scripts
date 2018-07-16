@@ -26,7 +26,7 @@ def swap(first, second):
 
 def main():
     # make keyboard more like Kinesis
-    swap("minus underscore", "grave asciitilde")
+    swap("equal plus", "grave asciitilde")
 
 if __name__ == '__main__':
     main()
