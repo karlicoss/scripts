@@ -6,7 +6,7 @@ from subprocess import check_output, check_call, run, PIPE, Popen
 import sys
 from collections import namedtuple
 import time
-from typing import Tuple, Dict, NamedTuple
+from typing import Tuple, Dict, NamedTuple, Optional
 
 # wmctrl -d
 # wmctrl -lG
@@ -107,6 +107,7 @@ def get_window_info(wid: Wid) -> Window:
 
 def get_active() -> Window:
     wid = check_output(["xdotool", "getactivewindow"]).decode('utf-8').strip()
+    # TODO make sure it's not caja?
     return get_window_info(wid)
 
 def get_by_title(title: str) -> Window:
@@ -126,19 +127,30 @@ Desktop = Tuple[Workspace, Monitor]
 def flip(d: Desktop) -> Desktop:
     return (d[0], Right if d[1] == Left else Left)
 
-def coord_to_workspace(x, y):
-    return x // WORKSPACE_WIDTH + HDESKTOPS * (y // WORKSPACE_HEIGHT)
-
 class WM:
-    def get_desktop(self, w: Window) -> Desktop:
+    def get_desktop(self, w: Window) -> Optional[Desktop]:
         raise NotImplementedError
 
     def get_this_desktop(self) -> Desktop:
         raise NotImplementedError
 
+    def _active_window_helper(self):
+        # TODO wm dependent?...
+        vinfo = check_output(['wmctrl', '-d']).decode('utf-8')
+        res = re.search("(\d+).*DG.*VP: (\d+),(\d+)", vinfo)
+        ws = int(res.group(1))
+        x = int(res.group(2))
+        y = int(res.group(3))
+        return ws, x, y
+
+
+  # TODO ugh, unclear how to query where is current focus... 
+    def get_left_active_desktop(self) -> Desktop:
+        raise NotImplementedError
+
 class Unity(WM):
-    def get_desktop(self, w: Window) -> Desktop:
-        workspace = coord_to_workspace(w.x, w.y)
+    def get_desktop(self, w: Window) -> Optional[Desktop]:
+        workspace = self.coord_to_workspace(w.x, w.y)
         xpos = w.x % WORKSPACE_WIDTH
         ypos = w.y % WORKSPACE_HEIGHT
         monitor = None
@@ -153,10 +165,26 @@ class Unity(WM):
         w = get_active()
         return get_desktop(w)
 
+    def coord_to_workspace(self, x, y) -> Workspace:
+        return x // WORKSPACE_WIDTH + HDESKTOPS * (y // WORKSPACE_HEIGHT)
+
+    def get_left_active_desktop(self) -> Desktop:
+        _, x, y = self._active_window_helper()
+        ws = self.coord_to_workspace(x, y)
+        return (ws, Left)
+
 # mate's got real virtual desktops
 class Mate(WM):
-    def _get_workspace(self, wid: Wid) -> Workspace:
-        return int(check_output(['xdotool', 'get_desktop_for_window', str(wid)]).decode('utf-8'))
+    def _get_workspace(self, wid: Wid) -> Optional[Workspace]:
+        res = run(['xdotool', 'get_desktop_for_window', str(wid)], stdout=PIPE)
+        if res.returncode == 1:
+            # sometimes windows have no workspace, e.g. 'desktop window'...
+            return None
+        elif res.returncode == 0:
+            return int(res.stdout.decode('utf-8'))
+        else:
+            res.check_returncode()
+            return None # dummy, will never get here..
 
     def get_monitor(self, w: Window) -> Monitor:
         xpos = w.x % WORKSPACE_WIDTH
@@ -168,8 +196,15 @@ class Mate(WM):
             monitor = Right
         return monitor
 
-    def get_desktop(self, w: Window) -> Desktop:
-        workspace = w.workspace if w.workspace is not None else self._get_workspace(w.wid)
+    def get_desktop(self, w: Window) -> Optional[Desktop]:
+        workspace = None
+        if w.workspace is not None:
+            workspace = w.workspace
+        else:
+            ws = self._get_workspace(w.wid)
+            if ws is None:
+                return None
+            workspace = ws
         return (workspace, self.get_monitor(w))
 
     def get_this_desktop(self) -> Desktop:
@@ -179,19 +214,15 @@ class Mate(WM):
         monitor = self.get_monitor(w)
         return (workspace, monitor)
 
+    def get_left_active_desktop(self) -> Desktop:
+        ws, _, _ = self._active_window_helper()
+        return (ws, Left)
 
 wm = Mate() # TODO
 
 def get_desktop(w: Window) -> Desktop:
     return wm.get_desktop(w)
 
-  # TODO ugh, unclear how to query where is current focus... 
-def get_left_active_desktop() -> Desktop:
-    vinfo = check_output(['wmctrl', '-d']).decode('utf-8')
-    res = re.search("VP: (\d+),(\d+)", vinfo)
-    x = int(res.group(1))
-    y = int(res.group(2))
-    return (coord_to_workspace(x, y), LEFT)
 
 
 _unity_filters = [
@@ -243,7 +274,9 @@ def iter_windows():
 def get_windows():
     return list(iter_windows())
 
-def moveto(wid: str, m: Monitor, resize=True):
+def moveto(wid: str, d: Desktop, resize=True): # TODO FIX
+    (ws, m) = d
+
     if resize:
         w = m.res.x // 2
         h = m.res.y // 2
@@ -251,7 +284,8 @@ def moveto(wid: str, m: Monitor, resize=True):
         w = -1
         h = -1
     (x, y) = monitor_middle(m)
-    check_call([
+    # TODO add -t....
+    cmd = [
         "wmctrl",
         "-i", # interpret window argument as numeric value
         "-r",
@@ -260,7 +294,10 @@ def moveto(wid: str, m: Monitor, resize=True):
         # 5 for centered gravity (see https://standards.freedesktop.org/wm-spec/wm-spec-1.3.html)
         # geometry is modified so the window can always be moved
         "5,{x},{y},{w},{h}".format(x=x, y=y, w=w, h=h)
-    ])
+    ]
+    if ws is not None:
+        cmd.extend(["-t", str(ws)]) # TODO FIXME not sure if would work on unity, most likely will have to encapsulate the command behind the WM
+    check_call(cmd)
 
 def activate(wid: str):
     check_call([
@@ -276,8 +313,13 @@ def switch_to(wid: Wid):
         "-a", str(wid)
     ])
 
-def notify(text: str, error=True):
-    check_call("notify-send --urgency={urgency} \"{text}\"".format(urgency="critical" if error else "normal", text=text), shell=True)
+def notify(*things, error=False):
+    thing = ""
+    for th in things:
+        if not isinstance(th, str):
+            th = str(th)
+        thing += th
+    check_call("notify-send --urgency={urgency} \"{thing}\"".format(urgency="critical" if error else "normal", thing=thing), shell=True)
 
 
 def dbg(s):
@@ -290,15 +332,17 @@ def dbg(s):
 
 def move_active_to_other():
     a = get_active()
+    where = None
     if 0 <= a.x < Left.res.x:
         # left monitor
-        moveto(a.wid, Right)
+        where = Right
     elif Right.x <= a.x <= Right.x + Right.res.x:
         # right monitor
-        moveto(a.wid, Left)
+        where = Left
     else:
         notify("Cound't determine current desktop!")
         sys.exit(1)
+    moveto(a.wid, (None, where))
 
 def get_window_order() -> Dict[int, int]:
     stack = [w.strip() for w in check_output('xprop -root | grep "_NET_CLIENT_LIST_STACKING(WINDOW)"', shell=True).decode('utf-8').split("# ")[-1].split(', ')]
@@ -340,12 +384,13 @@ def show_here(title: str, command: str):
     aw = get_active()
     desktop = None
     if aw is None:
-        desktop = get_left_active_desktop()
+        desktop = wm.get_left_active_desktop()
     else:
         desktop = get_desktop(aw)
+        if desktop is None:
+            desktop = wm.get_left_active_desktop()
 
-    mv = Left if desktop[1] == Left else Right
-    moveto(pwin.wid, mv, resize=False)
+    moveto(pwin.wid, desktop, resize=False)
     activate(pwin.wid)
 
 def daemon():
