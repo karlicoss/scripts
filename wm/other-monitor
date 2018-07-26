@@ -284,7 +284,7 @@ class Mate(WM):
         ws, _, _ = self._active_window_helper()
         return (ws, Left)
 
-wm = Unity() # TODO
+wm = Mate() # TODO
 
 def get_desktop(w: Window) -> Desktop:
     return wm.get_desktop(w)
