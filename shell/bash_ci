@@ -3,19 +3,25 @@ function join_by { local IFS="$1"; shift; echo "$*"; }
 
 ERRORS=()
 
-# usage: ci_run echo 1; or ci_run false
-function ci_run() {
+function ci_run_f() {
     # hopefully 60 minutes is enought for anything?
     if [[ -v CRON ]]; then
         where="/dev/null"
     else
         where="/dev/stdout"
     fi
-    if ! timeout 3600 "$@" >$where ; then
+    if ! "$@" >$where ; then
         joined=$(join_by "_" "$@") # ugh..
         ERRORS+=($joined)
     fi
 }
+
+# usage: ci_run echo 1; or ci_run false
+function ci_run() {
+    ci_run_f timeout 3600 "$@"
+}
+
+
 
 # usage: ci_report_errors as the last line of your script
 function ci_report_errors() {
@@ -30,3 +36,11 @@ function ci_report_errors() {
         exit 1
     fi
 }
+
+
+# this is convenient since you can't use ! everywhere
+# e.g. 2>/dev/null FAILS some_command
+function FAILS {
+    ! "$@"
+}
+
