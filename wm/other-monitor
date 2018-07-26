@@ -166,7 +166,39 @@ class WM:
     def get_left_active_desktop(self) -> Desktop:
         raise NotImplementedError
 
+    def _moveto_helper(self, cmd, ws):
+        raise NotImplementedError
+
+    def moveto(self, wid: str, d: Desktop, resize=True):
+        (ws, m) = d
+        # TODO has to be relative to current ?
+
+        if resize:
+            w = m.res.x // 2
+            h = m.res.y // 2
+        else:
+            w = -1
+            h = -1
+        (x, y) = monitor_middle(m)
+        # TODO add -t....
+        cmd = [
+            "wmctrl",
+            "-i", # interpret window argument as numeric value
+            "-r",
+            wid,
+            "-e",
+            # 5 for centered gravity (see https://standards.freedesktop.org/wm-spec/wm-spec-1.3.html)
+            # geometry is modified so the window can always be moved
+            "5,{x},{y},{w},{h}".format(x=x, y=y, w=w, h=h)
+        ]
+        if ws is not None:
+            self._moveto_helper(cmd, ws)
+        check_call(cmd)
+
 class Unity(WM):
+    def _moveto_helper(self, cmd, ws):
+        pass
+
     def get_desktop(self, w: Window) -> Optional[Desktop]:
         _, x, y = self._active_window_helper()
         x += w.x
@@ -197,8 +229,14 @@ class Unity(WM):
         ws = self.coord_to_workspace(x, y)
         return (ws, Left)
 
+    def _moveto(self, cmd):
+        return cmd
+
 # mate's got real virtual desktops
 class Mate(WM):
+    def _moveto_helper(self, cmd, ws):
+      cmd.extend(["-t", str(ws)])
+
     def _get_workspace(self, wid: Wid) -> Optional[Workspace]:
         res = run(['xdotool', 'get_desktop_for_window', str(wid)], stdout=PIPE)
         if res.returncode == 1:
@@ -305,29 +343,7 @@ def get_windows():
     return list(iter_windows())
 
 def moveto(wid: str, d: Desktop, resize=True): # TODO FIX
-    (ws, m) = d
-
-    if resize:
-        w = m.res.x // 2
-        h = m.res.y // 2
-    else:
-        w = -1
-        h = -1
-    (x, y) = monitor_middle(m)
-    # TODO add -t....
-    cmd = [
-        "wmctrl",
-        "-i", # interpret window argument as numeric value
-        "-r",
-        wid,
-        "-e",
-        # 5 for centered gravity (see https://standards.freedesktop.org/wm-spec/wm-spec-1.3.html)
-        # geometry is modified so the window can always be moved
-        "5,{x},{y},{w},{h}".format(x=x, y=y, w=w, h=h)
-    ]
-    if ws is not None:
-        cmd.extend(["-t", str(ws)]) # TODO FIXME not sure if would work on unity, most likely will have to encapsulate the command behind the WM
-    check_call(cmd)
+    wm.moveto(wid, d, resize)
 
 def activate(wid: str):
     check_call([
