@@ -20,6 +20,21 @@ Monitor = namedtuple('Monitor', ['id', 'x', 'y', 'res'])
 
 debug = False
 
+def notify(*things, error=False):
+    thing = ""
+    for th in things:
+        if not isinstance(th, str):
+            th = str(th)
+        thing += th
+    check_call("notify-send --urgency={urgency} \"{thing}\"".format(urgency="critical" if error else "normal", thing=thing), shell=True)
+
+def dbg(s):
+    if not debug:
+        return
+    print(s)
+    notify("DEBUG: " + s, error=True)
+
+
 # assumes monitors set up kinda like this
 #      ____
 #  ____|  |
@@ -131,6 +146,9 @@ class WM:
     def get_desktop(self, w: Window) -> Optional[Desktop]:
         raise NotImplementedError
 
+    def get_this_workspace(self) -> Workspace:
+        raise NotImplementedError
+
     def get_this_desktop(self) -> Desktop:
         raise NotImplementedError
 
@@ -150,9 +168,12 @@ class WM:
 
 class Unity(WM):
     def get_desktop(self, w: Window) -> Optional[Desktop]:
-        workspace = self.coord_to_workspace(w.x, w.y)
-        xpos = w.x % WORKSPACE_WIDTH
-        ypos = w.y % WORKSPACE_HEIGHT
+        _, x, y = self._active_window_helper()
+        x += w.x
+        y += w.y
+        workspace = self.coord_to_workspace(x, y)
+        xpos = x % WORKSPACE_WIDTH
+        ypos = y % WORKSPACE_HEIGHT
         monitor = None
         if 0 <= xpos < Left.res.x:
             monitor = Left
@@ -160,10 +181,13 @@ class Unity(WM):
             monitor = Right
         return (workspace, monitor)
 
+    def get_this_workspace(self) -> Workspace:
+        _, x, y = self._active_window_helper()
+        return self.coord_to_workspace(x, y)
 
     def get_this_desktop(self) -> Desktop:
-        w = get_active()
-        return get_desktop(w)
+        w = get_active() # TODO if none, just return left? or make get_desktop handle none?
+        return self.get_desktop(w)
 
     def coord_to_workspace(self, x, y) -> Workspace:
         return x // WORKSPACE_WIDTH + HDESKTOPS * (y // WORKSPACE_HEIGHT)
@@ -185,6 +209,10 @@ class Mate(WM):
         else:
             res.check_returncode()
             return None # dummy, will never get here..
+
+    def get_this_workspace(self) -> Workspace:
+        # TOD Ouse _get_workspace??
+        raise NotImplementedError
 
     def get_monitor(self, w: Window) -> Monitor:
         xpos = w.x % WORKSPACE_WIDTH
@@ -218,11 +246,10 @@ class Mate(WM):
         ws, _, _ = self._active_window_helper()
         return (ws, Left)
 
-wm = Mate() # TODO
+wm = Unity() # TODO
 
 def get_desktop(w: Window) -> Desktop:
     return wm.get_desktop(w)
-
 
 
 _unity_filters = [
@@ -230,6 +257,9 @@ _unity_filters = [
     'Hud',
     'Xdnd',
     'Desktop',
+    'Compiz',
+    'unity-panel',
+    'unity-launcher',
 ]
 
 _mate_filters = [
@@ -312,21 +342,6 @@ def switch_to(wid: Wid):
         "-i", # to treat -a argument as window id
         "-a", str(wid)
     ])
-
-def notify(*things, error=False):
-    thing = ""
-    for th in things:
-        if not isinstance(th, str):
-            th = str(th)
-        thing += th
-    check_call("notify-send --urgency={urgency} \"{thing}\"".format(urgency="critical" if error else "normal", thing=thing), shell=True)
-
-
-def dbg(s):
-    if not debug:
-        return
-    print(s)
-    notify("DEBUG: " + s, error=False)
 
 # ugh right, so Mate does have real desktops...
 
