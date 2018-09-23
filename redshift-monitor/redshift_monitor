@@ -52,6 +52,17 @@ class RedshiftDaemon:
         ret = self.redshift.poll()
         return ret is not None and ret != 0
 
+    def get_geocode(self, city: str):
+        for backoff in [0, 1, 5, 10, 30, 60, 100, 200]:
+            print(f"Waiting for {backoff} seconds..")
+            time.sleep(backoff)
+            try:
+                return self.geolocator.geocode(city)
+            except Exception as e:
+                print(f"Exception {e} during geocoding... waiting")
+        else:
+            return None
+
     def run(self):
         atexit.register(lambda: self.try_stop_refshift())
         while True:
@@ -60,9 +71,12 @@ class RedshiftDaemon:
             if new_city != self.city:
                 self.city = new_city
                 print(f"Detected change in city {self.city} -> {new_city}, rerunning...")
-                geo = self.geolocator.geocode(new_city)
-                print(f"Current location: {geo}")
-                self.restart_redshift(geo)
+                geo = self.get_geocode(new_city)
+                if geo is None:
+                    print("Couldn't detect location. Keeping previous settings.")
+                else:
+                    print(f"New location: {geo}")
+                    self.restart_redshift(geo)
 
             if self.failed():
                 raise RuntimeError("Redshift has terminated!")
