@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+import sys
+from subprocess import check_call
+
+keywords = sys.argv[1:]
+
+kw = ' '.join(keywords)
+aw = "'" + '|'.join(keywords) + "'"
+
+check_call(
+    f'recoll -t -A {kw} | ag --passthru --color {aw}',
+    shell=True
+)
