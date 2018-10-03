@@ -8,6 +8,6 @@ kw = ' '.join(keywords)
 aw = "'" + '|'.join(keywords) + "'"
 
 check_call(
-    f'recoll -t -A {kw} | ag --passthru --color {aw}',
+    f'recoll -t -A {kw} | ag --passthru --color {aw} | less -R',
     shell=True
 )
