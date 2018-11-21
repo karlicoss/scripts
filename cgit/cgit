@@ -1,0 +1,3 @@
+#!/bin/bash
+set -eu
+git --work-tree="$HOME" "$@"
