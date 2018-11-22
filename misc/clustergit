@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+import sys
+from subprocess import run, PIPE, check_output
+
+out = check_output(['clustergit', *sys.argv[1:]]).decode('utf8')
+bad_words = ['Changes', 'Behind', 'Unpushed']
+
+error = False
+if any(x in out for x in bad_words):
+    error = True
+
+sys.stdout.write(out)
+if error:
+    sys.exit(1)
