@@ -8,6 +8,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('symlink-checker')
 
+from kython.fs import apply_on
+
 PATHS = [
    '/L/',
 ]
@@ -24,18 +26,17 @@ def check(p):
                 logger.error(f"broken: {ff}")
 
 
-
 def go(p, recursive=False):
-    # TODO do not walk inside...
-    # but for now it's fine, works quick enough..
     for dp, dirs, files in os.walk(p):
         if '.check-symlinks' in files:
             check(dp)
 
 
+def predicate(d, dirs, files):
+    return '.check-symlinks' in files
 
 for p in PATHS:
-    go(p)
+    apply_on(predicate, p, check)
 
 
 if len(broken) > 0:
