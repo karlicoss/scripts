@@ -2,7 +2,7 @@
 import sys
 from subprocess import run, PIPE, check_output
 
-out = check_output(['clustergit', *sys.argv[1:]]).decode('utf8')
+out = check_output(['/L/soft/bin/clustergit', *sys.argv[1:]]).decode('utf8')
 bad_words = ['Changes', 'Behind', 'Unpushed']
 
 error = False
