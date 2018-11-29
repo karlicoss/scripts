@@ -4,9 +4,9 @@
 from subprocess import check_call, check_output
 
 def bind(kc: int, value):
-    check_call(f'xmodmap -e "keycode {kc} = {value}"', shell=True)
+    check_call(f'DISPLAY=:0 xmodmap -e "keycode {kc} = {value}"', shell=True)
 
-current_raw = check_output('xmodmap -pke', shell=True).decode('utf8').splitlines()
+current_raw = check_output('DISPLAY=:0 xmodmap -pke', shell=True).decode('utf8').splitlines()
 
 current = []
 for c in current_raw:
