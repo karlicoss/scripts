@@ -1,0 +1,2 @@
+#!/bin/bash
+/L/soft/bin/zzzfoo --prompt 'Recoll: ' --rofi-options ' -lines 25 -location 2' -o xdg-open
