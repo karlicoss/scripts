@@ -26,6 +26,7 @@ minus = find_key(' minus ')
 plus  = find_key(' plus ')
 
 # make keyboard more like kinesis
+# TODO err. there is some extra layout in panel. which is empty, so maybe it doesn't have to do with key fixing script..
 needs_swap = minus[0] + 1 == plus[0]
 if needs_swap:
     bind(tilde[0], plus[1])
