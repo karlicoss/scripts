@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+from typing import Optional
+
+import logging
+from kython.klogging import setup_logzero
+
+def get_logger():
+    return logging.getLogger('crawl-dangling')
+
+DIRS = [Path('***REMOVED***/')]
+
+BACKED_UP = {
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+    '***REMOVED***',
+}
+
+
+def is_backed_up(p: Path) -> bool:
+    for b in BACKED_UP:
+        try:
+            p.relative_to(Path(b))
+            return True
+        except ValueError:
+            continue
+    else:
+        return False
+
+
+def excluded(p: Path) -> bool:
+    return p.stem in ('.check-symlinks')
+
+
+def main():
+    logger = get_logger()
+    setup_logzero(logger, level=logging.DEBUG)
+
+    errors = []
+    def error(*args):
+        logger.error(*args)
+        errors.append(args)
+
+    for dd in DIRS:
+        logger.info('checking %s', dd)
+        if not dd.exists():
+            error("%s doesn't exist!", dd)
+            continue
+        for root, dirs, files in os.walk(dd, topdown=True):
+            r = Path(root)
+            if is_backed_up(r):
+                logger.info('skipping %s', r)
+                dirs[:] = []
+                files[:] = []
+            for f in files:
+                mf: Optional[Path] = None
+                ff = r.joinpath(f)
+                # TODO hmm. what if it points to backed up symlink? will it fully resolve??
+                if ff.is_symlink():
+                    # TODO what if it doesnt' exist?
+                    res = ff.resolve()
+                    if not is_backed_up(res):
+                        mf = res
+                else:
+                    mf = ff
+                if mf is not None and not excluded(mf):
+                    error(mf)
+
+    if len(errors) > 0:
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
