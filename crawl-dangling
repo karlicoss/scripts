@@ -85,6 +85,7 @@ def main():
             continue
         for root, dirs, files in os.walk(dd, topdown=True):
             r = Path(root)
+            logger.debug('checking %s', r)
             if is_handled(r):
                 logger.info('skipping %s', r)
                 dirs[:] = []
@@ -92,14 +93,6 @@ def main():
             for f in files:
                 mf: Optional[Path] = None
                 ff = r.joinpath(f)
-                # TODO hmm. what if it points to backed up symlink? will it fully resolve??
-                if ff.is_symlink():
-                    # TODO what if it doesnt' exist?
-                    res = ff.resolve()
-                    if not is_handled(res):
-                        mf = res
-                else:
-                    mf = ff
                 if mf is not None and not excluded(mf):
                     error(mf)
 
