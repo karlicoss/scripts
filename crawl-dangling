@@ -11,8 +11,6 @@ from kython.klogging import setup_logzero
 def get_logger():
     return logging.getLogger('crawl-dangling')
 
-DIRS = [Path('***REMOVED***/')]
-
 BACKED_UP = {
     '***REMOVED***',
     '***REMOVED***',
@@ -47,7 +45,11 @@ def is_backed_up(path: Path) -> bool:
 
 
 def excluded(p: Path) -> bool:
-    return p.stem in ('.check-symlinks', '.mypy_cache')
+    if p.stem in ('.check-symlinks', '.mypy_cache'):
+        return True
+    if (p / '.nodangling').exists():
+        return True
+    return False
 
 
 def main():
@@ -56,6 +58,7 @@ def main():
 
     p = ArgumentParser()
     p.add_argument('--skip', action='append')
+    p.add_argument('roots', nargs='*', default=['***REMOVED***'])
     args = p.parse_args()
 
     skipped = [] if args.skip is None else args.skip
@@ -74,7 +77,8 @@ def main():
             return True
         return False
 
-    for dd in DIRS:
+    dirs = [Path(p) for p in args.roots]
+    for dd in dirs:
         logger.info('checking %s', dd)
         if not dd.exists():
             error("%s doesn't exist!", dd)
