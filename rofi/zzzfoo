@@ -1,2 +1,2 @@
 #!/bin/bash
-/L/soft/bin/zzzfoo --synthetic-abstract  --prompt 'Recoll: ' --rofi-options ' -lines 25 -location 2' -o xdg-open
+/L/soft/zzzfoo/zzzfoo  --synthetic-abstract  --prompt 'Recoll: ' --rofi-options ' -lines 25 -location 2' -o xdg-open
