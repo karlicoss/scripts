@@ -1,0 +1,2 @@
+#!/bin/bash
+~/.spacemacs.d/gclient '(search-code)'
