@@ -77,6 +77,7 @@ def main():
             return True
         return False
 
+    # TODO hmm. reuse kythong thing?
     dirs = [Path(p) for p in args.roots]
     for dd in dirs:
         logger.info('checking %s', dd)
