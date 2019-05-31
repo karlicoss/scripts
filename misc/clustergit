@@ -2,17 +2,56 @@
 import re
 import sys
 from subprocess import run, PIPE, check_output
+import os
+import argparse
+from kython import flatten
 
-out = check_output(['/L/soft/bin/clustergit', *sys.argv[1:]]).decode('utf8')
-bad_words = [
-  '(?<!No )Changes',
-  'Behind',
-  'Unpushed',
-]
-error = False
-if any(re.search(x, out) for x in bad_words):
-    error = True
 
-sys.stdout.write(out)
-if error:
-    sys.exit(1)
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('dirs', nargs='*')
+    args = p.parse_args()
+
+    # TODO --fetch??
+    env = os.environ.copy()
+    # makes git status read only, otherwise you might get git conflicts during syncing
+    env.update(GIT_OPTIONAL_LOCKS=0)
+    out = check_output([
+        '/L/soft/bin/clustergit',
+        '--quiet',
+        '--align', '80', # hopefully enough?
+        *flatten(['-d', d] for d in args.dirs)
+    ]).decode('utf8')
+    lines = out.splitlines()
+
+
+    words = [
+        ('(?<!No )Changes', 5),
+        ('Unpushed'       , 4),
+
+        ('Behind'         , 3),
+        ('Untracked files', 2),
+    ]
+    err_treshold = 4
+
+
+    results = []
+    for line in lines:
+        pr = 0
+        for word, prio in words:
+            if re.search(word, line):
+                pr = max(pr, prio)
+        results.append((pr, line))
+
+    results = list(sorted(results, reverse=True))
+
+    for _, line in results:
+        sys.stdout.write(line + '\n')
+
+    error = any(level >= err_treshold for level, _ in results)
+    if error:
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
