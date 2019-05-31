@@ -4,6 +4,7 @@ import sys
 from subprocess import run, PIPE, check_output
 import os
 import argparse
+from pathlib import Path
 from kython import flatten
 
 
@@ -26,29 +27,37 @@ def main():
 
 
     words = [
-        ('(?<!No )Changes', 5),
-        ('Unpushed'       , 4),
+        ('(?<!No )Changes', 2 ** 5),
+        ('Unpushed'       , 2 ** 4),
 
-        ('Behind'         , 3),
-        ('Untracked files', 2),
+        ('Behind'         , 2 ** 3),
+        ('On branch'      , 2 ** 2),
+        ('Untracked files', 2 ** 1),
     ]
-    err_treshold = 4
+    err_treshold = 2 ** 4
 
 
     results = []
     for line in lines:
         pr = 0
+        repo = Path(line.split(':')[0].rstrip())
+        # TODO FIXME what if it's a bare repo??
+        index = repo / '.git' / 'index'
+
+        # TODO not sure if mtime is a good indicator of latest change...
+        mtime = index.stat().st_mtime
         for word, prio in words:
             if re.search(word, line):
-                pr = max(pr, prio)
-        results.append((pr, line))
+                pr += prio
+        # the more recently it was modified, the more it matters (probably?)
+        results.append((pr, mtime, line))
 
     results = list(sorted(results, reverse=True))
 
-    for _, line in results:
+    for _, _, line in results:
         sys.stdout.write(line + '\n')
 
-    error = any(level >= err_treshold for level, _ in results)
+    error = any(level >= err_treshold for level, _,  _ in results)
     if error:
         sys.exit(1)
 
