@@ -1,3 +1,0 @@
-#!/bin/bash
-set -eu
-cgit diff --exit-code "$@"
