@@ -18,7 +18,7 @@ def main():
     # makes git status read only, otherwise you might get git conflicts during syncing
     env.update(GIT_OPTIONAL_LOCKS=0)
     out = check_output([
-        '/L/soft/bin/clustergit',
+        '/L/soft/clustergit/clustergit',
         '--quiet',
         '--align', '80', # hopefully enough?
         *flatten(['-d', d] for d in args.dirs)
