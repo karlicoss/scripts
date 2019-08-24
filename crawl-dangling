@@ -26,6 +26,7 @@ BACKED_UP = {
     '***REMOVED***',
     '***REMOVED***',
     '***REMOVED***',
+    '***REMOVED***',
 }
 
 
@@ -79,6 +80,7 @@ def main():
 
     # TODO hmm. reuse kythong thing?
     dirs = [Path(p) for p in args.roots]
+    assert len(dirs) > 0  # sanity check
     for dd in dirs:
         logger.info('checking %s', dd)
         if not dd.exists():
@@ -93,7 +95,7 @@ def main():
                 files[:] = []
             for f in files:
                 mf: Optional[Path] = None
-                ff = r.joinpath(f)
+                mf = r.joinpath(f)
                 if mf is not None and not excluded(mf):
                     error(mf)
 
