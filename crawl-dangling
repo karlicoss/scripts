@@ -27,6 +27,7 @@ BACKED_UP = {
     '***REMOVED***',
     '***REMOVED***',
     '***REMOVED***',
+    '***REMOVED***',
 }
 
 
@@ -55,7 +56,7 @@ def excluded(p: Path) -> bool:
 
 def main():
     logger = get_logger()
-    setup_logzero(logger, level=logging.DEBUG)
+    setup_logzero(logger, level=logging.INFO)
 
     p = ArgumentParser()
     p.add_argument('--skip', action='append')
