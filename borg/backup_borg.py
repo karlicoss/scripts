@@ -1,13 +1,16 @@
+from itertools import chain
 from pathlib import Path
 from subprocess import check_output, run, check_call
 
-def do_borg(repo, paths) -> None:
+def do_borg(*, repo, paths, exclude=(), dry=False) -> None:
     repo = Path(repo)
     paths = list(map(str, paths))
 
     def borg(*args):
+        cmd = ['borg', *args]
+        print(f"Running: {cmd}")
         run(
-            ['borg', *args],
+            cmd,
             check=True,
             env={
                 'BORG_REPO': repo,
@@ -20,11 +23,20 @@ def do_borg(repo, paths) -> None:
     # TODO how to keep options in sync?
     borg(
         'create',
+
+        # ugh, stats are not allowed with dry
+        *(
+            ['--dry-run']
+            if dry else
+            [
+                '--stats',
+                '--filter', 'AME', # only list changes, exclude present files
+            ]
+        ),
+
         '--compression', 'lz4', # fast, not super efficient
         '--verbose',
-        '--filter', 'AME', # only list changes, exclude present files
         '--list',
-        '--stats',
         '--show-rc', # return code
 
 
@@ -38,6 +50,8 @@ def do_borg(repo, paths) -> None:
         '--exclude', '**/node_modules',
 
         '--exclude', '**/.stack-work', # haskell
+
+        *chain.from_iterable(['--exclude', x] for x in exclude),
 
         '--exclude-if-present', '.rustc_info.json', # rust
         '--exclude-if-present', '.borg-exclude', # custom
