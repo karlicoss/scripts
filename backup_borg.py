@@ -1,7 +1,10 @@
-from os.path import lexists
+from pathlib import Path
 from subprocess import check_output, run, check_call
 
-def do_borg(repo, paths):
+def do_borg(repo, paths) -> None:
+    repo = Path(repo)
+    paths = list(map(str, paths))
+
     def borg(*args):
         run(
             ['borg', *args],
@@ -11,7 +14,7 @@ def do_borg(repo, paths):
             },
         )
 
-    if not lexists(repo):
+    if not repo.exists():
         borg('init', '--encryption=none')
 
     # TODO how to keep options in sync?
