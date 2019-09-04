@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+
+query="$1"
+# TODO instead of fzf use smth else?
+path="$(fdfind -td . / | fzf --exact --query "$query")"
+exec mc "$path"
