@@ -1,2 +1,2 @@
 #!/bin/bash
-~/.spacemacs.d/gclient '(search-info-quick)'
+~/.spacemacs.d/gclient '(my/search-info)'
