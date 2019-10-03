@@ -1,0 +1,6 @@
+#!/bin/bash -eux
+
+# TODO document why I'm using separate daemon
+# TODO document recentf-mode nil
+PREPARE_SWOOP="emacs --daemon=swoop-daemon --eval \"(recentf-mode nil)\" --eval \"(spacemacs/defer-until-after-user-config 'my/prepare-swoop)\""
+exec "~/bin/gemacsclient" -s 'swoop-daemon' -a "$PREPARE_SWOOP" '(helm-multi-swoop-all)'
