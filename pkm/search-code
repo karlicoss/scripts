@@ -1,2 +1,1 @@
-#!/bin/bash
-~/.spacemacs.d/gclient '(my/search-code)'
+/L/repos/scripts-public/pkm/search-code
