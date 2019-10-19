@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+
 from os.path import isdir, islink, exists, isfile, join, basename
 from pathlib import Path
 from fnmatch import fnmatch
@@ -10,30 +11,25 @@ import logging
 from kython import setup_logzero
 from kython.fs import Go, traverse
 
+from typing import Sequence, Optional, Dict, Any
+
 
 def get_logger():
     return logging.getLogger('symlink-checker')
-
-
-IGNORED_DIRS = [
-    'node_modules',
-]
-
-SCIGNORE = '.symlink-checker-ignore'
 
 # TODO eh, global variable...
 broken = []
 
 
-def load_gitignore(path: Path):
+def load_gitignore(path: Path, sroot: Path):
     # shit. tried using pip install gitignore_parser, but it's got a bug that doesn't allow using '*'...
     # this format is a subset and only supports ignored files
     try:
         lines = [l for l in list(path.read_text().splitlines()) if len(l.strip()) > 0]
         root = path.parent
-        def check(p: Path):
+        def check(p: Path, sroot=sroot):
             # TODO check should be defensive too?
-            relp = str(p.relative_to(root))
+            relp = str(p.relative_to(sroot))
             for pat in lines:
                 if fnmatch(relp, pat):
                     return True
@@ -48,37 +44,40 @@ def load_gitignore(path: Path):
 
 # TODO shit, that sucks and a bit too slow;
 # I just was too annoyed at trying to make it pass ignorefile recursively
-ignores = {}
+ignores: Dict[Path, Any] = {}
 
 def ignored(path: Path):
     # TODO that really, really sucks...
     # shit, that's just ridiculously slow
     cur = path
-    while True:
-        pp = cur.parent
-        if pp == cur:
-            break
-        if pp in ignores:
-            return ignores[pp](path)
-
-        cur = pp
+    while cur != cur.parent:
+        cur = cur.parent
+        if cur in ignores:
+            return ignores[cur](path)
 
     return False
 
+
+# TODO messy...
+def load_scignore(root: Path, files: Sequence[str], sroot: Optional[Path]=None):
+    if sroot is None:
+        sroot = root
+    for p in ('.scignore', '.symlink-checker.ignore'):
+        if p in files:
+            ignores[sroot] = load_gitignore(root / p, sroot=sroot)
+            return
 
 
 def handle(root, dirs, files):
     root = Path(root)
     logger = get_logger()
-    if root.name in IGNORED_DIRS: # TODO should be global gitignore formatted file instead?
-        return Go.BAIL
-
-    if SCIGNORE in files:
-        ignores[root] = load_gitignore(root / SCIGNORE)
 
     if ignored(root):
         logger.info('ignored: %s', root)
         return Go.BAIL
+
+    load_scignore(root, files)
+
 
     for f in files:
         ff = root / f
@@ -100,8 +99,13 @@ def main():
     p.add_argument('root', nargs='+', type=Path)
     args = p.parse_args()
 
+
+    # TODO somewhat hacky..
+    home = Path('~').expanduser()
+    load_scignore(home, [p.name for p in home.iterdir()], sroot=Path('/'))
+
     # TODO might be good to handle errors gracefully in case of bad gitignore
-    for p in args.root:
+    for p in [p.absolute() for p in args.root]:
         logger.info("checking %s", p)
         traverse(p, handle, logger=logger)
 
