@@ -44,20 +44,22 @@ def main():
         # TODO FIXME what if it's a bare repo??
         index = repo / '.git' / 'index'
 
+        ignored = (repo / '.clustergitignore').exists()
+
         # TODO not sure if mtime is a good indicator of latest change...
         mtime = index.stat().st_mtime
         for word, prio in words:
             if re.search(word, line):
                 pr += prio
         # the more recently it was modified, the more it matters (probably?)
-        results.append((pr, mtime, line))
+        results.append((not ignored, pr, mtime, line))
 
     results = list(sorted(results, reverse=True))
 
-    for _, _, line in results:
+    for _, _, _, line in results:
         sys.stdout.write(line + '\n')
 
-    error = any(level >= err_treshold for level, _,  _ in results)
+    error = any(level >= err_treshold for _, level, _,  _ in results)
     if error:
         sys.exit(1)
 
