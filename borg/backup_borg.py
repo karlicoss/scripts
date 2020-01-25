@@ -1,6 +1,25 @@
 from itertools import chain
 from pathlib import Path
 from subprocess import check_output, run, check_call
+from datetime import datetime
+
+
+def heartbeat(*, path: Path, repo: Path, dt: datetime):
+    """
+    Heartbeat so we know when was the last time directory was backed up
+    """
+    payload = f'''
+{dt.timestamp()}
+{dt.isoformat()}
+'''.lstrip()
+    hb_dir = path / '.borg-heartbeat'
+    hb_dir.mkdir(exist_ok=True)
+
+    # TODO disk label?
+    mount = check_output(['df', repo]).decode('utf8').splitlines()[-1].split()[-1]
+    mount = mount.replace('/', '_')
+    (hb_dir / mount).write_text(payload)
+
 
 def do_borg(*, repo, paths, exclude=(), dry=False) -> None:
     repo = Path(repo)
@@ -58,5 +77,9 @@ def do_borg(*, repo, paths, exclude=(), dry=False) -> None:
         "::{hostname}-{utcnow}",
         *paths,
     )
+
+    dt = datetime.now()
+    for p in paths:
+        heartbeat(path=Path(p), repo=repo, dt=dt)
 
     # TODO pruning? 
