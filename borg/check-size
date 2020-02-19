@@ -1,0 +1,7 @@
+#!/bin/bash
+set -eu
+
+REPO="$1"
+
+# https://github.com/borgbackup/borg/issues/2871#issuecomment-504669482
+printf 'Archive\t\t\t\t\tOrig\tComp\tDedup\n'; printf '%-32.32s\t%s\t%s\t%s\n' $(borg info --json --sort-by name --glob-archives '*' "$REPO" | jq '.archives[] | "\(.name) \(.stats.original_size) \(.stats.compressed_size) \(.stats.deduplicated_size)"' | sed --expression='s/^"//;s/"$//' | numfmt --field='2-4' --to=iec)
