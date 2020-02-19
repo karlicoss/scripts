@@ -1,10 +1,14 @@
 from itertools import chain
 from pathlib import Path
+import re
 from subprocess import check_output, run, check_call
 from datetime import datetime
+import socket
 
+# not necessarily a Path, e.g. could be ssh
+Repo = str
 
-def heartbeat(*, path: Path, repo: Path, dt: datetime):
+def heartbeat(*, path: Path, repo: Repo, dt: datetime):
     """
     Heartbeat so we know when was the last time directory was backed up
     """
@@ -15,28 +19,36 @@ def heartbeat(*, path: Path, repo: Path, dt: datetime):
     hb_dir = path / '.borg-heartbeat'
     hb_dir.mkdir(exist_ok=True)
 
-    # TODO disk label?
-    mount = check_output(['df', repo]).decode('utf8').splitlines()[-1].split()[-1]
-    mount = mount.replace('/', '_')
-    (hb_dir / mount).write_text(payload)
+    if '@' in repo: # must be remote
+        label = re.sub(r'[^\w_.)( -]', '', repo)
+    else:
+        # TODO disk label?
+        mount = check_output(['df', repo]).decode('utf8').splitlines()[-1].split()[-1]
+        label = mount.replace('/', '_')
+    (hb_dir / label).write_text(payload)
 
 
-def do_borg(*, repo, paths, exclude=(), dry=False) -> None:
-    repo = Path(repo)
+def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
     paths = list(map(str, paths))
 
-    def borg(*args):
+    def borg(*args, check=True):
         cmd = ['borg', *args]
         print(f"Running: {cmd}")
-        run(
+        return run(
             cmd,
-            check=True,
+            check=check,
             env={
                 'BORG_REPO': repo,
             },
         )
 
-    if not repo.exists():
+
+    def exists() -> bool:
+        res = borg('info', repo)
+        return res.returncode == 0
+
+
+    if not exists():
         borg('init', '--encryption=none')
 
     # TODO how to keep options in sync?
