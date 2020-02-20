@@ -10,9 +10,20 @@ def do_borg_home(**kwargs):
         exclude=['/home/karlicos/' + p for p in [
             '.borg-passphrase',
 
-            '.cache/mozilla',
             '.cache/borg',
+            '.cache/chromium',
+            '.cache/go-build',
+            '.cache/jedi',
+            '.cache/mozilla',
             '.cache/pip',
+           
+            '.config/syncthing/index-*',
+
+            '.recoll/xapiandb',
+
+
+            '.dropbox',
+            '.dropbox-dist*',
 
             '.cabal',
             '.cargo',
@@ -25,6 +36,11 @@ def do_borg_home(**kwargs):
             '.local/share/Trash',
 
             'snap/spotify',
-        ]],
+ 
+            ## glumov, perm errors
+            '.rnd',
+            'postgres',
+            ##
+        ]], 
         **kwargs,
     )
