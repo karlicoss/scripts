@@ -44,7 +44,7 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
 
 
     def exists() -> bool:
-        res = borg('info', repo)
+        res = borg('info', repo, check=False)
         return res.returncode == 0
 
 
