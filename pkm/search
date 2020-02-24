@@ -1,2 +1,2 @@
 #!/bin/bash -eux
-exec "~/bin/gemacsclient" "(spacemacs/defer-until-after-user-config #'my/search)"
+exec "~/bin/gemacsclient" "(my/search)"
