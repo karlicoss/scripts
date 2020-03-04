@@ -29,6 +29,8 @@ def heartbeat(*, path: Path, repo: Repo, dt: datetime):
 
 
 def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
+    # TODO assert that paths exist? to prevent passing a single string...
+    assert not isinstance(paths, str)
     paths = list(map(str, paths))
 
     def borg(*args, check=True):
@@ -86,6 +88,7 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
 
         '--exclude-if-present', '.rustc_info.json', # rust
         '--exclude-if-present', '.borg-exclude', # custom
+        '--exclude-if-present', '.borgignore', # TODO eh, I guess it's more consistent than .borg-exclude
         "::{hostname}-{utcnow}",
         *paths,
     )
