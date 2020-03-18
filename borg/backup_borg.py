@@ -54,7 +54,7 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
         borg('init', '--encryption=none')
 
     # TODO how to keep options in sync?
-    borg(
+    res = borg(
         'create',
 
         # ugh, stats are not allowed with dry
@@ -91,7 +91,11 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
         '--exclude-if-present', '.borgignore', # TODO eh, I guess it's more consistent than .borg-exclude
         "::{hostname}-{utcnow}",
         *paths,
+        check=False,
     )
+    if res.returncode > 0:
+        # eh. might happen if there are permission issues...
+        input('Borg exited with non-zero code! ctrl-c if you want to interrupt.')
 
     dt = datetime.now()
     for p in paths:
