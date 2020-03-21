@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+from subprocess import check_output, run
+import sys
+
+
+if __name__ == '__main__':
+    cmd = 'systemctl --user --failed --no-pager'
+    lines = check_output(cmd + ' --no-legend', shell=True).decode('utf8').splitlines()
+    units = [line.split()[0] for line in lines]
+
+    # dron units are displayed on the monitor anyway
+    def is_dron(unit: str):
+        u = check_output(f'systemctl --user cat {unit}', shell=True).decode('utf8')
+        return 'MANAGED BY DRON' in u
+    # TODO hmm. maybe instead, just query Type=Simple? Or with WantedBy??
+
+    non_dron = [u for u in units if not is_dron(u)]
+    if len(non_dron) > 0:
+        print(f"units failed: {non_dron}")
+        run(cmd, shell=True)
+        sys.exit(1)
+    else:
+        print("No failures!")
