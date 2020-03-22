@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+'''
+Checks that everything on the filesystem is backed up somewhere: cloud/hard drives/etc
+'''
+
 from argparse import ArgumentParser
 import os
 from pathlib import Path
