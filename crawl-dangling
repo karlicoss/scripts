@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 import os
 from pathlib import Path
 import sys
-from typing import Optional
+from typing import Optional, Set, List, Tuple
 
 from kython.klogging2 import LazyLogger
 
@@ -11,16 +11,27 @@ from kython.klogging2 import LazyLogger
 logger = LazyLogger('crawl-dangling')
 
 
-# TODO FIXME load dynamically
-from config import HANDLED
+Reason = str
+Handled = List[Tuple[Path, Reason]]
 
-BACKED_UP = [x for x, _ in HANDLED]
+HANDLED: Handled = []
+
+
+def load_config(config: Path):
+    global HANDLED
+
+    globs = {}  # type: ignore
+    exec(config.read_text(), globs)
+
+    HANDLED = globs['HANDLED']
+
 
 # TODO use something more efficient? regex?
-def matches_prefix(path: Path, prefixes) -> bool:
-    for b in prefixes:
+def matches_prefix(path: Path) -> bool:
+    for p, reason in HANDLED:
         try:
-            path.relative_to(Path(b))
+            path.relative_to(Path(p))
+            # TODO use reason?
             return True
         except ValueError:
             continue
@@ -29,7 +40,7 @@ def matches_prefix(path: Path, prefixes) -> bool:
 
 
 def in_config(path: Path) -> bool:
-    return matches_prefix(path=path, prefixes=BACKED_UP)
+    return matches_prefix(path=path)
 
 
 def excluded(p: Path) -> bool:
@@ -41,8 +52,12 @@ def excluded(p: Path) -> bool:
 
 def main():
     p = ArgumentParser()
+    p.add_argument('--config', type=Path, required=True)
     p.add_argument('roots', nargs='*')
     args = p.parse_args()
+
+    config = args.config
+    load_config(config)
 
     roots = [Path(p) for p in args.roots]
     assert len(roots) > 0  # sanity check
