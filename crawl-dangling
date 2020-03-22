@@ -5,32 +5,18 @@ from pathlib import Path
 import sys
 from typing import Optional
 
-import logging
-from kython.klogging import setup_logzero
-
-def get_logger():
-    return logging.getLogger('crawl-dangling')
-
-BACKED_UP = {
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-    '***REMOVED***',
-}
+from kython.klogging2 import LazyLogger
 
 
+logger = LazyLogger('crawl-dangling')
+
+
+# TODO FIXME load dynamically
+from config import HANDLED
+
+BACKED_UP = [x for x, _ in HANDLED]
+
+# TODO use something more efficient? regex?
 def matches_prefix(path: Path, prefixes) -> bool:
     for b in prefixes:
         try:
@@ -42,28 +28,24 @@ def matches_prefix(path: Path, prefixes) -> bool:
         return False
 
 
-def is_backed_up(path: Path) -> bool:
+def in_config(path: Path) -> bool:
     return matches_prefix(path=path, prefixes=BACKED_UP)
 
 
 def excluded(p: Path) -> bool:
-    if p.stem in ('.check-symlinks', '.mypy_cache'):
-        return True
+    # TODO use .danglignignore file?
     if (p / '.nodangling').exists():
         return True
     return False
 
 
 def main():
-    logger = get_logger()
-    setup_logzero(logger, level=logging.INFO)
-
     p = ArgumentParser()
-    p.add_argument('--skip', action='append')
-    p.add_argument('roots', nargs='*', default=['***REMOVED***'])
+    p.add_argument('roots', nargs='*')
     args = p.parse_args()
 
-    skipped = [] if args.skip is None else args.skip
+    roots = [Path(p) for p in args.roots]
+    assert len(roots) > 0  # sanity check
 
     errors = []
     def error(*args):
@@ -71,18 +53,13 @@ def main():
         errors.append(args)
 
     def is_handled(p: Path) -> bool:
-        if is_backed_up(p):
-            return True
-        if matches_prefix(p, prefixes=skipped):
+        if in_config(p):
             return True
         if excluded(p):
             return True
         return False
 
-    # TODO hmm. reuse kythong thing?
-    dirs = [Path(p) for p in args.roots]
-    assert len(dirs) > 0  # sanity check
-    for dd in dirs:
+    for dd in roots:
         logger.info('checking %s', dd)
         if not dd.exists():
             error("%s doesn't exist!", dd)
@@ -102,6 +79,7 @@ def main():
 
     if len(errors) > 0:
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
