@@ -1,0 +1,88 @@
+#!/usr/bin/python3 -u
+
+###
+# If you use 'geoclue' in redshift and run vpn, it's getting pretty confused (as it should be!).
+# But timezone information is available on ubuntu anyway, so this script uses it and reruns redshift in case something changed.
+# pip3 install geopy tzlocal
+###
+
+import atexit
+import signal
+import time
+import os
+from subprocess import check_output, Popen
+import sys
+
+from geopy.geocoders import Nominatim # type: ignore
+
+def get_tz_city():
+    from tzlocal import get_localzone # type: ignore
+    city = get_localzone().zone.split('/')[-1]
+    return city
+
+class RedshiftDaemon:
+    def __init__(self, check_every_s):
+        self.city = None
+        self.redshift = None
+        self.geolocator = Nominatim()
+        self.check_every_s = check_every_s
+
+    def stop_refshift(self):
+        if self.redshift is not None:
+            os.killpg(os.getpgid(self.redshift.pid), signal.SIGTERM)
+            self.redshift = None
+
+    def try_stop_refshift(self):
+        try:
+            self.stop_refshift()
+        except Exception as e:
+            sys.stderr.write(str(e))
+
+
+    def restart_redshift(self, location):
+        self.stop_refshift()
+        cmd = f'redshift-gtk -l {location.latitude}:{location.longitude}'.split()
+        print("Running " + str(cmd))
+        self.redshift = Popen(cmd, preexec_fn=os.setsid)
+        time.sleep(5) # give it a bit of time to start, this is for proper failure detection
+
+    def failed(self) -> bool:
+        if self.redshift is None:
+            return False
+        ret = self.redshift.poll()
+        return ret is not None and ret != 0
+
+    def get_geocode(self, city: str):
+        for backoff in [0, 1, 5, 10, 30, 60, 100, 200]:
+            print(f"Waiting for {backoff} seconds..")
+            time.sleep(backoff)
+            try:
+                return self.geolocator.geocode(city)
+            except Exception as e:
+                print(f"Exception {e} during geocoding... waiting")
+        else:
+            return None
+
+    def run(self):
+        atexit.register(lambda: self.try_stop_refshift())
+        while True:
+            new_city = get_tz_city()
+            print(f"Detected city: {new_city}")
+            if new_city != self.city:
+                self.city = new_city
+                print(f"Detected change in city {self.city} -> {new_city}, rerunning...")
+                geo = self.get_geocode(new_city)
+                if geo is None:
+                    print("Couldn't detect location. Keeping previous settings.")
+                else:
+                    print(f"New location: {geo}")
+                    self.restart_redshift(geo)
+
+            if self.failed():
+                raise RuntimeError("Redshift has terminated!")
+
+            print(f"Sleeping for {self.check_every_s} seconds")
+            time.sleep(self.check_every_s)
+
+if __name__ == '__main__':
+    RedshiftDaemon(60 * 30).run()

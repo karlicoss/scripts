@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+from subprocess import check_output, run, PIPE
+import re
+
+p = run(["pidof", "openvpn"], stdout=PIPE)
+
+if p.returncode != 0:
+    print("--") # no vpn
+else:
+    pid = p.stdout.decode('utf-8')
+    out = check_output(f"ps ax | grep {pid}", shell=True).decode('utf-8')
+    [res] = re.findall(r'(\w+).nordvpn.com', out)
+    print(f"{res}")
+

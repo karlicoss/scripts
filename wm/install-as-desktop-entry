@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+import argparse
+import tempfile
+from pathlib import Path
+from subprocess import check_call
+
+
+TEMPLATE = """
+[Desktop Entry]
+Type=Application
+Name={name}
+Exec={exec}
+Terminal={terminal}
+""".lstrip()
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('--name', required=True)
+    p.add_argument('--terminal', action='store_true')
+    p.add_argument('exec', help='Executable to run')
+    args = p.parse_args()
+
+    name = args.name
+    bin = Path(args.exec).absolute()
+
+    entry = TEMPLATE.format(
+        name=args.name,
+        exec=bin,
+        terminal='true' if args.terminal else 'false',
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        tdir = Path(td)
+        dname = name + '.desktop'
+        dfile = tdir / dname
+        dfile.write_text(entry)
+        check_call([
+            'desktop-file-install',
+            '--dir', str(Path('~/.local/share/applications').expanduser()),
+            str(dfile),
+        ])
+
+
+if __name__ == '__main__':
+    main()

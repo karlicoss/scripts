@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+from subprocess import check_output, check_call
+
+# fucking hell, why is it so hard??
+def getchar():
+    import sys, tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
+def yesno(prompt):
+    import sys
+    yes = set(['y', 'Y'])
+    no  = set(['n', 'N'])
+
+    sys.stdout.write(prompt + " ")
+    sys.stdout.flush()
+    while True:
+        choice = getchar()
+        if choice in yes:
+            print()
+            return True
+        elif choice in no:
+            print()
+            return False
+        else:
+            print("Please respond with 'yes' or 'no'\n")
+
+def iter_gone():
+    out = check_output('git branch -vv', shell=True).decode('utf-8').splitlines()
+    for l in out:
+        if 'gone]' in l:
+            l = l.strip()
+            bname = l.split()[0]
+            rest = l[len(bname):].strip()
+            yield (bname, rest)
+
+for name, rest in iter_gone():
+    if yesno("Delete {} {}?".format(name, rest)):
+        check_call("git branch -d {}".format(name), shell=True)
+    else:
+        print("  keeping " + name)
+

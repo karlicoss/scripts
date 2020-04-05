@@ -1,0 +1,2 @@
+#!/bin/bash
+terminator -m -T mycroftai -x /L/soft/mycroft-core/start-mycroft.sh debug

@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+from subprocess import check_call
+import sys
+
+def main():
+    mode = sys.argv[1]
+    if mode == 'on':
+        check_call("sudo modprobe uvcvideo", shell=True);
+    elif mode == 'off':
+        check_call("sudo modprobe -r uvcvideo", shell=True);
+    else:
+        raise RuntimeError(f'Bad mode {mode}')
+
+
+if __name__ == '__main__':
+    main()

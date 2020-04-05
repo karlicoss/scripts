@@ -1,0 +1,3 @@
+#!/bin/bash
+set -eu
+exec git "--work-tree=/home/$USER/.local/lib/python3.6/site-packages" "$@"

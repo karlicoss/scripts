@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""
+I tried killall -SIGSTOP dunst -- but that makes notify-send command stuck
+
+"""
+
+
+import os
+from pathlib import Path
+import signal
+import subprocess
+from subprocess import check_call, Popen
+import sys
+import time
+
+import gi # type: ignore
+gi.require_version('Gtk', '3.0') # TODO versions??
+gi.require_version('AppIndicator3', '0.1')
+from gi.repository import Gtk, AppIndicator3 # type: ignore
+
+def kill_dunst():
+    print("Killing dunst...")
+    res = subprocess.run(["pkill", "dunst"])
+    print(res)
+    if res.returncode not in {0, 1}:
+        res.check_returncode()
+    time.sleep(0.5)
+
+def run_dunst(config: str):
+    cmd = ['dunst', '-conf', config]
+    print(f"Running {cmd}")
+    # TODO not sure why preexec is necessary. figure out child processes after all
+    dunst = subprocess.Popen(cmd, preexec_fn=os.setsid)
+    # TODO check exit code
+
+dunst_config     = Path("~/.config/dunst/dunstrc").expanduser()
+dunst_config_dnd = Path("/var/tmp/dunstrc.dnd")
+
+def dnd_on():
+    with dunst_config_dnd.open('w') as fdnd, dunst_config.open('r') as fc:
+        for line in fc:
+            if "# FILTERS START" in line:
+                break
+            fdnd.write(line + "\n")
+        fdnd.write("""
+# TODO log somewhere?
+[dnd]
+    appname = *
+    summary = *
+    format = ""
+        """)
+
+    kill_dunst()
+    run_dunst(str(dunst_config_dnd))
+
+def dnd_off():
+    kill_dunst()
+    run_dunst(str(dunst_config))
+
+class State:
+    DND  = "dnd"
+    SHOW = "show"
+
+# TODO retain it through reboot? maybe ~/.cache?
+_STATE = Path('/var/tmp/dunst_dnd_state')
+
+# TODO store this in var?
+def save_state(last):
+    # remember the last state the indicator was running in
+    with _STATE.open('w') as fo:
+        fo.write(last)
+
+def load_state():
+    # TODO if exists
+    if not _STATE.exists():
+        return State.SHOW
+    else:
+        with _STATE.open('r') as fo:
+            return fo.read().strip()
+
+class DunstDndIndicator:
+    def __init__(self):
+        self.app = "dunst-dnd"
+        self.icon_dnd = "/L/coding/tmp/dnd.png"
+        self.icon_show = "/L/coding/tmp/show.png"
+        self.state = load_state()
+        curr_icon = self.icon_dnd if self.state == State.DND else self.icon_show
+        self.indicator = AppIndicator3.Indicator.new(
+            self.app,
+            curr_icon,
+            AppIndicator3.IndicatorCategory.OTHER,
+        )
+        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        self.indicator.set_menu(self.create_menu())
+
+
+    def create_menu(self):
+        menu = Gtk.Menu()
+        self.item_dnd = Gtk.RadioMenuItem("DND")
+        self.item_dnd.connect('activate', self.toggle_dnd)
+        menu.append(self.item_dnd)
+
+        item_show = Gtk.RadioMenuItem.new_from_widget(self.item_dnd)
+        item_show.set_label("Display notifications")
+        menu.append(item_show)
+
+        menu_sep2 = Gtk.SeparatorMenuItem()
+        menu.append(menu_sep2)
+
+        item_quit = Gtk.MenuItem('Quit')
+        item_quit.connect('activate', self.stop)
+        menu.append(item_quit)
+
+        (self.item_dnd if self.state == State.DND else item_show).set_active(True)
+
+        menu.show_all()
+        return menu
+
+    def toggle_dnd(self, *args):
+        new_state = State.DND if self.item_dnd.get_active() == True else State.SHOW
+        if new_state == State.SHOW:
+            self.indicator.set_icon(self.icon_show)
+            dnd_off()
+        else:
+            self.indicator.set_icon(self.icon_dnd)
+            dnd_on()
+        save_state(new_state)
+
+    def stop(self, source):
+        # stop the indicator
+        nonotifs_tools.stop_proc()
+        Gtk.main_quit()
+
+
+def indicator():
+    DunstDndIndicator()
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    Gtk.main()
+
+
+def test():
+    from subprocess import check_output
+
+    print("DND ON")
+    dnd_on()
+    check_call("notify-send dnd-on", shell=True)
+    time.sleep(3) # give it some time
+
+    print("DND OFF")
+    dnd_off()
+    check_call("notify-send dnd-off", shell=True)
+    time.sleep(3) # give it some time
+
+    print("DND ON")
+    dnd_on()
+    check_call("notify-send dnd-on", shell=True)
+    time.sleep(3) # give it some time
+
+    kill_dunst()
+
+
+def main():
+    mode = sys.argv[1]
+    if mode == 'on':
+        # TODO send notify?
+        dnd_on()
+    elif mode == 'off':
+        # TODO send notify?
+        dnd_off()
+    elif mode == 'test':
+        test()
+    elif mode == 'kill':
+        kill_dunst()
+    elif mode == 'indicator':
+        indicator()
+    else:
+        raise RuntimeError(f'Unknown mode {mode}')
+
+if __name__ == '__main__':
+    main()
+    # TODO make sure permissions are not messed up

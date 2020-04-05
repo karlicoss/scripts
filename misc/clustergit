@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import re
+import sys
+from subprocess import run, PIPE, check_output
+import os
+import argparse
+from pathlib import Path
+from kython import flatten
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('dirs', nargs='*')
+    args = p.parse_args()
+
+    # TODO --fetch??
+    env = os.environ.copy()
+    # makes git status read only, otherwise you might get git conflicts during syncing
+    env.update(GIT_OPTIONAL_LOCKS=0)
+    out = check_output([
+        '/L/soft/clustergit/clustergit',
+        '--quiet',
+        '--align', '80', # hopefully enough?
+        *flatten(['-d', d] for d in args.dirs)
+    ]).decode('utf8')
+    lines = out.splitlines()
+
+
+    words = [
+        ('(?<!No )Changes', 2 ** 5),
+        ('Unpushed'       , 2 ** 4),
+
+        ('Behind'         , 2 ** 3),
+        ('On branch'      , 2 ** 2),
+        ('Untracked files', 2 ** 1),
+    ]
+    err_treshold = 2 ** 4
+
+
+    results = []
+    for line in lines:
+        pr = 0
+        repo = Path(line.split(':')[0].rstrip())
+        # TODO FIXME what if it's a bare repo??
+        index = repo / '.git' / 'index'
+
+        ignored = (repo / '.clustergitignore').exists()
+
+        # TODO not sure if mtime is a good indicator of latest change...
+        mtime = index.stat().st_mtime
+        for word, prio in words:
+            if re.search(word, line):
+                pr += prio
+        # the more recently it was modified, the more it matters (probably?)
+        results.append((not ignored, pr, mtime, line))
+
+    results = list(sorted(results, reverse=True))
+
+    for _, _, _, line in results:
+        sys.stdout.write(line + '\n')
+
+    error = any(level >= err_treshold for _, level, _,  _ in results)
+    if error:
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
