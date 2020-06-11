@@ -3,21 +3,34 @@ from subprocess import check_output, run
 import sys
 
 
-if __name__ == '__main__':
-    cmd = 'systemctl --user --failed --no-pager'
+def main():
+    from argparse import ArgumentParser
+    p = ArgumentParser()
+    p.add_argument('--user', action='store_true')
+    args = p.parse_args()
+
+    istty = sys.stdout.isatty()
+    muser = '--user' if args.user else ''
+
+    cmd = f'systemctl {muser} --failed --no-pager'
     lines = check_output(cmd + ' --no-legend', shell=True).decode('utf8').splitlines()
     units = [line.split()[0] for line in lines]
 
     # dron units are displayed on the monitor anyway
     def is_dron(unit: str):
-        u = check_output(f'systemctl --user cat {unit}', shell=True).decode('utf8')
+        u = check_output(f'systemctl {muser} cat {unit}', shell=True).decode('utf8')
         return 'MANAGED BY DRON' in u
     # TODO hmm. maybe instead, just query Type=Simple? Or with WantedBy??
 
     non_dron = [u for u in units if not is_dron(u)]
     if len(non_dron) > 0:
-        print(f"units failed: {non_dron}")
+        print(f"Units failed: {non_dron}", file=sys.stderr)
         run(cmd, shell=True)
         sys.exit(1)
     else:
-        print("No failures!")
+        if istty: # to avoid cron spam
+            print("No failures!", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
