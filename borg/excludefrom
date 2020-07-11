@@ -1,38 +1,12 @@
-# TODO reuse in borg script?
+**/node_modules
 
-.emacs.d/elpa
-.emacs.d/cache
-.cloudmacs.d/elpa
-.cloudmacs.d/cache
-.dropbox
-.dropbox-dist*
-.gdfuse/*/cache
-.local/lib
-.local/share/Trash
-.recoll/xapiandb
+# python
+**/*.pyc
+**/__pycache__
+**/.eggs
+**/*.egg-info
+**/.tox
+**/.cache
+**/.mypy_cache
 
-
-.config/syncthing/index-*
-
-**/.dropbox.cache
-.cache/borg
-.cache/chromium
-.cache/go-build
-.cache/jedi
-.cache/mozilla
-.cache/pip
-
-.cabal
-.cargo
-.gradle
-.npm
-.rustup
-.stack
-go
-snap/spotify
-
- 
-# glumov, perm errors
-.rnd
-postgres
 

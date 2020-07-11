@@ -28,7 +28,7 @@ def heartbeat(*, path: Path, repo: Repo, dt: datetime):
     (hb_dir / label).write_text(payload)
 
 
-def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
+def do_borg(*, repo: Repo, paths, exclude=(), dry=False, compression=None, create_args=()) -> None:
     # TODO assert that paths exist? to prevent passing a single string...
     assert not isinstance(paths, str)
     paths = list(map(str, paths))
@@ -44,6 +44,9 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
             },
         )
 
+
+    excludes = Path(__file__).resolve().absolute().parent / 'excludefrom'
+    assert excludes.exists(), excludes
 
     def exists() -> bool:
         res = borg('info', repo, check=False)
@@ -67,28 +70,18 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
             ]
         ),
 
-        '--compression', 'lz4', # fast, not super efficient
+        '--compression', compression or 'lz4', # lz4 is fast, not super efficient
         '--verbose',
         '--list',
         '--show-rc', # return code
 
 
         '--exclude-caches',
-        '--exclude', '**/.dropbox.cache',
-
-        # python
-        '--exclude', '**/.mypy_cache',
-        '--exclude', '**/.tox',
-
-        '--exclude', '**/node_modules',
-
-        '--exclude', '**/.stack-work', # haskell
-
+        '--exclude-if-present', '.borgignore',
+        '--exclude-from', str(excludes),
         *chain.from_iterable(['--exclude', x] for x in exclude),
+        *create_args,
 
-        '--exclude-if-present', '.rustc_info.json', # rust
-        '--exclude-if-present', '.borg-exclude', # custom
-        '--exclude-if-present', '.borgignore', # TODO eh, I guess it's more consistent than .borg-exclude
         "::{hostname}-{utcnow}",
         *paths,
         check=False,
@@ -99,6 +92,7 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False) -> None:
 
     dt = datetime.now()
     for p in paths:
-        heartbeat(path=Path(p), repo=repo, dt=dt)
+        if not dry:
+            heartbeat(path=Path(p), repo=repo, dt=dt)
 
     # TODO pruning? 
