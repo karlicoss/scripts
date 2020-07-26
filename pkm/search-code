@@ -1,2 +1,2 @@
 #!/bin/bash -eux
-exec "~/bin/gemacsclient" "(my/search-code)"
+exec "gemacsclient" "(my/search-code)"
