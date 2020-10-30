@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+import json
+from typing import List
+import re
+from subprocess import check_output
+
+# TODO hmm, need to sort bugs in ls-id...
+
+def bugids() -> List[str]:
+    js = json.loads(check_output('git-bug ls --format json'.split()).decode('utf8'))
+    return [j['id'] for j in js]
+
+
+def main():
+    print('#+TODO: OPEN | CLOSED')
+    print()
+    for x in bugids():
+        bs = check_output(f'git-bug show --format org-mode {x}'.split()).decode('utf8')
+        R = re.compile('^[*]', re.MULTILINE)
+        for f, t in [('[closed]', 'CLOSED'), ('[open]', 'OPEN  ')]:
+            if f in bs:
+                bs = bs.replace(f, '')
+                bs = t + ' ' + bs
+
+        bs = R.sub('**', bs) # indent
+        bs = '* ' + bs
+        print(bs)
+
+
+if __name__ == '__main__':
+    main()
+
+# git-bug ls --format json | jq 'map(.id)'
+
+# 0c63005488c7bda9d16259012279de813fa63ef0
+# git-bug ls-id | sort | xargs -i git-bug show --format org-mode {}
