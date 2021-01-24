@@ -7,48 +7,13 @@ from backup_borg import do_borg
 USER = 'karlicos'
 
 
-def do_borg_home(**kwargs):
+def do_borg_home(**kwargs) -> None:
     REPO = str(Path(__file__).absolute().parent / 'home')
     return do_borg(
         repo=REPO,
         paths=[f'/home/{USER}'],
-        # TODO reuse excludefrom file?
-        # exclude=[f'/home/{USER}/' + p for p in [
-        #     '.borg-passphrase',
-
-        #     '.cache/borg',
-        #     '.cache/chromium',
-        #     '.cache/go-build',
-        #     '.cache/jedi',
-        #     '.cache/mozilla',
-        #     '.cache/pip',
-        #    
-        #     TODO ugh. yet another argument for keeping it elsewhere...
-        #     '.config/syncthing/index-*',
-
-        #     '.recoll/xapiandb',
-
-
-        #     '.dropbox',
-        #     '.dropbox-dist*',
-
-        #     '.cabal',
-        #     '.cargo',
-        #     '.gradle',
-        #     '.npm',
-        #     '.rustup',
-        #     '.stack',
-
-        #     '.local/lib',
-        #     '.local/share/Trash',
-
-        #     'snap/spotify',
- 
-        #     ## glumov, perm errors
-        #     '.rnd',
-        #     'postgres',
-        #     ##
-        # ]], 
+        # see https://borgbackup.readthedocs.io/en/stable/usage/prune.html
+        prune='--keep-within=30d --keep-monthly=-1',
         **kwargs,
     )
 # TODO prune

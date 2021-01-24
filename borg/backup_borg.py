@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 from subprocess import check_output, run, check_call
 from datetime import datetime
+from typing import Optional
 import socket
 
 # not necessarily a Path, e.g. could be ssh
@@ -28,7 +29,7 @@ def heartbeat(*, path: Path, repo: Repo, dt: datetime):
     (hb_dir / label).write_text(payload)
 
 
-def do_borg(*, repo: Repo, paths, exclude=(), dry=False, compression=None, create_args=()) -> None:
+def do_borg(*, repo: Repo, paths, exclude=(), dry=False, compression=None, create_args=(), prune: Optional[str]=None) -> None:
     # TODO assert that paths exist? to prevent passing a single string...
     assert not isinstance(paths, str)
     paths = list(map(str, paths))
@@ -56,20 +57,19 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False, compression=None, creat
     if not exists():
         borg('init', '--encryption=none')
 
+    # TODO copy pasta from quickborg script...
+    mdry = [
+        '--dry-run'
+    ] if dry else [
+        '--stats', # incompatible with dry
+    ]
+
     # TODO how to keep options in sync?
     res = borg(
         'create',
 
-        # ugh, stats are not allowed with dry
-        *(
-            ['--dry-run']
-            if dry else
-            [
-                '--stats',
-                '--filter', 'AME', # only list changes, exclude present files
-            ]
-        ),
-
+        *mdry,
+        *([] if dry else ['--filter', 'AME']), # only list changes, exclude present files
         '--compression', compression or 'lz4', # lz4 is fast, not super efficient
         '--verbose',
         '--list',
@@ -95,4 +95,12 @@ def do_borg(*, repo: Repo, paths, exclude=(), dry=False, compression=None, creat
         if not dry:
             heartbeat(path=Path(p), repo=repo, dt=dt)
 
-    # TODO pruning? 
+    # todo maybe ls or something?
+    if prune is not None:
+        borg(
+            'prune',
+            '-v',
+            '--list',
+            *mdry,
+            *prune.split(),
+        )
